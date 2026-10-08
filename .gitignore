@@ -1,0 +1,67 @@
+# Nextflow runtime
+.nextflow/
+.nextflow.log*
+work/
+results/
+results_*/
+
+# Genome data (download from NCBI, see README)
+data/*/ncbi_dataset/
+data/*/md5sum.txt
+data/*/README.md
+data_bench/
+
+# Cactus runtime
+*_jobstore/
+jobstore*/
+*.hal
+
+# Large bioinformatics files (tests/test_data/*.fa are small and committed)
+*.fa.gz
+*.fasta
+*.fasta.gz
+*.fna
+*.fna.gz
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.gfa
+*.gfa.gz
+*.og
+*.odgi
+*.vcf
+*.vcf.gz
+*.bam
+*.bai
+*.paf
+*.paf.gz
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Logs
+*.log
+slurm-*.out
+slurm-*.err
+nohup.out
+
+# Local installs placed inside the repo folder
+/nextflow
+miniforge*.sh
+cactus-bin-*/
+venv-cactus*/
+*.sif
+
+# Python, editors, OS
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.idea/
+.vscode/
+*.swp
+.DS_Store
