@@ -31,21 +31,53 @@ run time per stage.
 ## Layout
 
 ```
-main.nf                       entry point
-nextflow.config               parameters, profiles, resource labels (effective values)
-conf/hpc.config               slurm profile: executor, partition, Cactus native binary
-conf/test.config              test profile: small data, reduced resources
-workflows/pangenome.nf        main workflow
-subworkflows/local/           validate_input, preprocessing, qc, graph_construction, graph_analysis
-modules/local/                seqkit_stats, seqkit_filter, quast, minigraph, cactus_minigraph,
-                              odgi (stats + viz), vg_stats
-bin/recommend_resources.sh    core/RAM recommendation from trace.tsv
-run_hpc.sh                    sbatch wrapper (orchestrator job: 32 cores, 64 GB, 72 h, medium-small)
-run_test.sh                   quick local test with tests/test_data/
-subset_chromosome1.py         builds size-limited test data from chromosomes 1-16 of each assembly
-samplesheet.csv               the three E. guineensis assemblies
-tests/test_data/              two small test assemblies + samplesheet
-data/                         placeholder for downloaded assemblies (not committed)
+RAPPiN/
+├── main.nf                          entry point
+├── nextflow.config                  parameters, profiles, resource labels
+├── samplesheet.csv                  the three E. guineensis assemblies
+├── run_hpc.sh                       sbatch wrapper (orchestrator: 32 cores, 64 GB, 72 h)
+├── run_test.sh                      quick local test with tests/test_data/
+├── subset_chromosome1.py            size-limited test data from chromosomes 1-16
+│
+├── conf/
+│   ├── hpc.config                   slurm profile (HPC Mahameru, Cactus native binary)
+│   └── test.config                  test profile (small data, reduced resources)
+│
+├── workflows/
+│   └── pangenome.nf                 main workflow
+│
+├── subworkflows/local/
+│   ├── validate_input.nf            read and check the samplesheet
+│   ├── preprocessing.nf             SeqKit stats + filter
+│   ├── qc.nf                        QUAST
+│   ├── graph_construction.nf        Minigraph + cactus-minigraph
+│   └── graph_analysis.nf            ODGI + VG statistics, 1D visualisation
+│
+├── modules/local/
+│   ├── preprocessing/
+│   │   ├── seqkit_stats.nf
+│   │   └── seqkit_filter.nf
+│   ├── qc/
+│   │   └── quast.nf
+│   ├── graph_construction/
+│   │   ├── minigraph.nf
+│   │   └── cactus_minigraph.nf
+│   └── graph_analysis/
+│       ├── odgi.nf                  odgi stats + odgi viz
+│       └── vg_stats.nf
+│
+├── bin/
+│   └── recommend_resources.sh       core/RAM recommendation from trace.tsv
+│
+├── tests/test_data/                 small test data (used by run_test.sh)
+│   ├── EG11.fa
+│   ├── EGPMv6.fa
+│   └── samplesheet.csv
+│
+└── data/                            downloaded assemblies go here (not committed)
+    ├── EG11/
+    ├── EGPMv6/
+    └── Eg-DCM/
 ```
 
 ## Requirements
@@ -149,8 +181,8 @@ Resource recommendation from a finished run:
 
 Cores = ceil(highest `%cpu` / 100); RAM = highest `peak_rss` + margin. The
 output (`--cpus-per-task`, `--mem`) is meant for the heaviest task: apply it to
-the `process_high` label in `nextflow.config` and raise `max_memory` if needed
-(see Known issues).
+the `process_high` label in `nextflow.config`. Label memory is capped by
+`max_memory` (64 GB in the `slurm` profile), so raise it too for larger values.
 
 Quick local test (laptop, from the repo folder; Cactus runs in Docker here):
 
@@ -174,18 +206,25 @@ copy. If sequence names collide across assemblies (e.g. `Chr01` everywhere),
 rename the headers to [PanSN-spec](https://github.com/pangenome/PanSN-spec)
 (`>{sample}#1#{name}`).
 
-## Outputs (`results/`)
+## Outputs
 
 ```
-qc/{sample}_quast/              QUAST report per assembly (report.tsv, report.txt)
-graph/pangenome.full.gfa        structural-variant-level graph (rGFA)
-graph/pangenome.sv.gfa          copy of pangenome.full.gfa
-graph/pangenome.cactus.log      cactus-minigraph log
-analysis/pangenome.stats.yaml   odgi stats: length, nodes, edges, paths, steps
-analysis/pangenome.vg_stats.txt vg stats: nodes, edges
-analysis/pangenome.1D.png       odgi viz 1D layout
-pipeline_info/trace.tsv         CPU, RAM and time per task
-pipeline_info/report.html, timeline.html, dag.html
+results/
+├── qc/
+│   └── {sample}_quast/              QUAST report per assembly (report.tsv, report.txt)
+├── graph/
+│   ├── pangenome.full.gfa           structural-variant-level graph (rGFA)
+│   ├── pangenome.sv.gfa             copy of pangenome.full.gfa
+│   └── pangenome.cactus.log         cactus-minigraph log
+├── analysis/
+│   ├── pangenome.stats.yaml         odgi stats: length, nodes, edges, paths, steps
+│   ├── pangenome.vg_stats.txt       vg stats: nodes, edges
+│   └── pangenome.1D.png             odgi viz 1D layout
+└── pipeline_info/
+    ├── trace.tsv                    CPU, RAM and time per task
+    ├── report.html                  Nextflow execution report
+    ├── timeline.html                task timeline
+    └── dag.html                     workflow diagram
 ```
 
 ## Parameters
@@ -199,36 +238,11 @@ pipeline_info/report.html, timeline.html, dag.html
 | `--min_contig` | `500` | minimum contig length for QUAST |
 | `--mg_preset` | `ggs` | Minigraph preset |
 | `--mg_min_mapq` | `5` | Minigraph minimum mapping quality |
-| `--cactus_cores` | `8` | currently has no effect (see Known issues) |
+| `--cactus_cores` | `8` | not read by `CACTUS_MINIGRAPH`, which uses the `process_high` CPU allocation |
 | `--max_cpus` / `--max_memory` / `--max_time` | `8` / `16.GB` / `24.h` | per-process caps; the `slurm` profile raises them to 32 / 64 GB / 72 h |
 
 Profiles: `conda`, `slurm` (use `-profile conda,slurm` on Mahameru), `test`,
 `docker`, `singularity`, `local`.
-
-## Known issues
-
-Found while measuring the pipeline on Mahameru; documented, not yet fixed:
-
-1. Effective resource labels. `process_low/medium/high` are defined in both
-   `conf/hpc.config` (4/8/16 cores, 8/16/32 GB) and the main `process` block of
-   `nextflow.config` (2/4/8 cores, 4/8/16 GB). The `nextflow.config` block comes
-   after `profiles`, so **2/4/8 cores and 4/8/16 GB apply**. Check with
-   `nextflow config -profile conda,slurm`.
-2. `max_memory` caps every label (64 GB in the `slurm` profile). To use a RAM
-   recommendation above 64 GB (e.g. 74 GB for the full oil palm genome), raise
-   `max_memory` as well.
-3. The graph is built twice. `cactus-minigraph` runs Minigraph itself and does
-   not use the GFA from `MINIGRAPH`, so graph construction runs twice
-   (~3.3 h each for the full oil palm genome).
-4. Graph level. `.full.gfa` is a structural-variant-level graph (rGFA). The
-   base-level Minigraph-Cactus steps (`cactus-graphmap`, `cactus-align`,
-   `cactus-graphmap-join`, or `cactus-pangenome`) are not run.
-5. `--cactus_cores` is unused; `CACTUS_MINIGRAPH` takes `task.cpus` from
-   `process_high`.
-6. `vg ids -s` in `odgi.nf` has no effect (its output is not saved);
-   `vg convert` already turns the rGFA node names into integers.
-7. On Mahameru, tasks that exceeded their memory request were not killed, so a
-   `COMPLETED` status does not prove an allocation is sufficient.
 
 ## Credits
 
